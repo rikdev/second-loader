@@ -1,0 +1,28 @@
+# Global build settings
+## Kernel build options
+CONFIG_KERNEL_KEXEC=y
+
+# Image configuration
+## Init configuration options
+CONFIG_IMAGEOPT=y
+CONFIG_INITOPT=y
+CONFIG_TARGET_INIT_CMD="/sbin/second-loader"
+
+# Base system
+## Customize bisybox options
+### Linux System Utilites
+CONFIG_BUSYBOX_CUSTOM=y
+CONFIG_BUSYBOX_CONFIG_BLKID=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_BLKID_TYPE=y
+#### Filesystem/Volume identification
+CONFIG_BUSYBOX_CONFIG_FEATURE_VOLUMEID_EXT=y
+
+# Kernel Modules
+## Filesystems
+CONFIG_PACKAGE_kmod-fs-ext4=y
+## USB Support
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+CONFIG_PACKAGE_kmod-usb2=y
+
+# Utilites
+CONFIG_PACKAGE_kexec=y

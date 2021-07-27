@@ -1,0 +1,76 @@
+#!/bin/sh
+
+init_fs() {
+	mount -t proc -o noatime,nodev,noexec,nosuid proc /proc
+	mount -t sysfs -o noatime,nodev,noexec,nosuid sysfs /sys
+	mount -t tmpfs -o noatime,nosuid,mode=0755 tmpfs /dev
+	mknod /dev/null c 1 3
+	mknod /dev/kmsg c 1 11
+}
+
+deinit_fs() {
+	rm /dev/kmsg
+	rm /dev/null
+	umount /dev
+	umount /sys
+	umount /proc
+}
+
+print_message() {
+	echo "second-loader: $1" >/dev/kmsg
+}
+
+load_kernel() {
+	local ROOT_ID="$1"
+	readonly ROOT_ID
+
+	KERNEL_LOADED=false
+	for f in /sys/dev/block/*; do
+		DEVICE="$(basename "${f}")"
+		mknod /dev/drive b ${DEVICE//:/ }
+		if ID="$(blkid /dev/drive | grep -w "${ROOT_ID}")"; then
+			TYPE="$(echo "${ID}" | sed 's/.*\bTYPE="\(\w*\).*/\1/')"
+			mount -r -t "${TYPE}" /dev/drive /mnt 2>/dev/null
+
+			if [[ -f '/mnt/boot/vmlinuz' ]]; then
+				COMMAND_LINE="$(sed 's/\broot=\S*//' /proc/cmdline) root=${DEVICE} rootwait"
+				kexec --load '/mnt/boot/vmlinuz' --command-line="${COMMAND_LINE}"
+				KERNEL_LOADED=true
+			else
+				print_message "Couldn't find kernel in block device \"${ROOT_ID}\""
+			fi
+
+			umount /mnt
+		fi
+		rm /dev/drive
+
+		[[ "${KERNEL_LOADED}" == true ]] && return 0
+	done
+
+	return 1
+}
+
+init_fs
+
+readonly SETTINGS_PATH='/etc/second-root'
+readonly SECOND_ROOT="$(cat "${SETTINGS_PATH}" 2>/dev/null || true)"
+
+if [[ -z "${SECOND_ROOT}" ]]; then
+	print_message "Coldn't load settings from file \"${SETTINGS_PATH}\""
+elif load_kernel "${SECOND_ROOT}"; then
+	print_message "Executing kernel from block device \"${SECOND_ROOT}\""
+	deinit_fs
+	if ! kexec --exec; then
+		init_fs
+		print_message "Couln't execute kernel from block device \"${SECOND_ROOT}\""
+	fi
+else
+	print_message "Coldn't find block device \"${SECOND_ROOT}\""
+fi
+
+
+[[ -x /init ]] && INIT_PATH='/init' || INIT_PATH='/sbin/init'
+readonly INIT_PATH
+print_message "Fallback to default init \"${INIT_PATH}\""
+deinit_fs
+exec "${INIT_PATH}"
